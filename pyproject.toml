@@ -1,0 +1,40 @@
+[project]
+name = "palimpsest-doc"
+version = "0.1.0.dev0"
+description = "Detect divergence between what a human reads and what a pipeline ingests"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "EUPL-1.2" }
+authors = [{ name = "Mykola Rudia", email = "t.techukr@gmail.com" }]
+keywords = ["pdf", "docx", "document-integrity", "forensics", "prompt-injection"]
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Security",
+    "Topic :: Text Processing",
+]
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "ruff>=0.6", "mypy>=1.11"]
+
+[project.scripts]
+palimpsest = "palimpsest.cli:main"
+
+[project.urls]
+Repository = "https://github.com/TODO/palimpsest"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/palimpsest"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

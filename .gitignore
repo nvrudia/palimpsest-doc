@@ -1,0 +1,19 @@
+__pycache__/
+*.py[cod]
+.venv/
+dist/
+build/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.bak
+
+# Internal specification, not for the public repository
+palimpsest-krok-1.md
+
+# Never commit real documents
+/samples/
+/corpus/
+*.pdf
+*.docx
