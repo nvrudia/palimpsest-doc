@@ -23,7 +23,7 @@ dev = ["pytest>=8", "ruff>=0.6", "mypy>=1.11"]
 palimpsest = "palimpsest.cli:main"
 
 [project.urls]
-Repository = "https://github.com/TODO/palimpsest"
+Repository = "https://github.com/nvrudia/palimpsest-doc"
 
 [build-system]
 requires = ["hatchling"]
