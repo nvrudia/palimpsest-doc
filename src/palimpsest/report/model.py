@@ -1,5 +1,6 @@
-"""Data structures of the Palimpsest-doc report. No logic, no serialisation yet."""
+"""Data structures of the Palimpsest-doc report, and its JSON serialisation."""
 
+import json
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
@@ -37,3 +38,17 @@ class Report:
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
+
+    def to_json(self, indent: int = 2) -> str:
+        """Serialise the report as JSON.
+
+        Keys keep the order the fields are declared in, which asdict preserves
+        and json.dumps does not disturb, so two reports on one document are
+        comparable line by line.
+
+        ensure_ascii is off deliberately: evidence is quoted verbatim from the
+        document, and a Ukrainian contract escaped into \\uXXXX sequences would
+        be unreadable to the person meant to check the quotation against the
+        original.
+        """
+        return json.dumps(self.to_dict(), indent=indent, ensure_ascii=False)

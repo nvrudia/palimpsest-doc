@@ -8,9 +8,10 @@ build/
 .mypy_cache/
 .ruff_cache/
 *.bak
+scratch_*.py
 
-# Internal specification, not for the public repository
-palimpsest-krok-1.md
+# Internal specifications, not for the public repository
+palimpsest-krok-*.md
 
 # Never commit real documents
 /samples/

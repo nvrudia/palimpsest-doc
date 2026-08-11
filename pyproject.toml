@@ -14,10 +14,16 @@ classifiers = [
     "Topic :: Security",
     "Topic :: Text Processing",
 ]
-dependencies = []
+# The extraction layer subclasses pdfminer's PDFLayoutAnalyzer and relies on
+# the render_string/render_char call chain, and on LTChar instances being
+# appended to `cur_item._objs`. None of that is public API, so the lower bound
+# is pinned to the version this was verified against rather than to a guess.
+dependencies = [
+    "pdfminer.six>=20260107",
+]
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "ruff>=0.6", "mypy>=1.11"]
+dev = ["pytest>=8", "ruff>=0.6", "mypy>=1.11", "reportlab>=4"]
 
 [project.scripts]
 palimpsest = "palimpsest.cli:main"
@@ -38,3 +44,11 @@ target-version = "py311"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+# reportlab ships no type information and no stub package is available in our
+# dependency set, so importing it fails the check with import-untyped. Scoped to
+# reportlab alone, and only reached from the test fixtures: an untyped import
+# anywhere else, including pdfminer, still fails as it should.
+[[tool.mypy.overrides]]
+module = "reportlab.*"
+ignore_missing_imports = true
