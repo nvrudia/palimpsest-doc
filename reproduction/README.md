@@ -15,8 +15,9 @@ Neither takes part in the tool: `reportlab` writes the sample document a script 
 `pdfplumber` is the library whose behaviour a script reports on. They are installed to
 demonstrate the observation, and installing them once is enough to check it.
 
-Each script verifies that both are present before it does anything, and names what is missing
-if they are not.
+Each script checks for what it needs before doing anything and names whatever is missing. Not
+every script needs both: only the first reads a document through `pdfplumber`, and the other
+two need `reportlab` and `pdfminer.six`.
 
 ## Scripts
 
@@ -24,6 +25,14 @@ if they are not.
   the character object built one call deeper, so it is absent from every character
   `pdfplumber` returns; the script shows where the field stops and what a detector built on
   those attributes can and cannot see as a result.
+- `02_call_without_effect.py` — `setTextRenderMode(0)` is decided against reportlab's own
+  record of the state, which a new text object starts at zero, so the call matches and writes
+  no operator; the script puts that reset beside an enclosing `saveState`/`restoreState` and
+  reads back the mode each fragment ends up carrying.
+- `03_silent_substitution.py` — text set in a font whose encoding does not cover it is
+  substituted glyph for glyph rather than refused, with no exception and no warning; the
+  script shows what comes back out, which faces the characters were diverted into, and how
+  unevenly the loss falls across scripts.
 
 ## Reproducibility
 
