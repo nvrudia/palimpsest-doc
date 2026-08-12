@@ -45,6 +45,14 @@ target-version = "py311"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 
+# The reproduction scripts stand outside the package: they import pdfplumber, which was
+# deliberately left out of the dependencies, so a type check could only pass by declaring an
+# override for a library the tool never loads. Excluding the directory keeps that admission out
+# of the configuration. This entry has to precede the overrides below, as TOML will not accept
+# [tool.mypy] after [[tool.mypy.overrides]] has already opened the table.
+[tool.mypy]
+exclude = ["^reproduction/"]
+
 # reportlab ships no type information and no stub package is available in our
 # dependency set, so importing it fails the check with import-untyped. Scoped to
 # reportlab alone, and only reached from the test fixtures: an untyped import
