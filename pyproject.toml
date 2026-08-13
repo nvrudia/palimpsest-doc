@@ -18,8 +18,18 @@ classifiers = [
 # the render_string/render_char call chain, and on LTChar instances being
 # appended to `cur_item._objs`. None of that is public API, so the lower bound
 # is pinned to the version this was verified against rather than to a guess.
+#
+# pypdfium2 is a runtime dependency, not a test one: rendering is a second,
+# independent reading of the document, and the tool relies on it while it works.
+# It has to be a different implementation, not merely a convenient one. It wraps
+# PDFium, which shares no code with pdfminer, so agreement between the two is
+# evidence. A single parser agreeing with itself is not.
+#
+# Licensing: the wrapper is BSD/Apache, PDFium is BSD. Both are compatible with
+# EUPL-1.2. Pillow arrives transitively and is used to read the raster.
 dependencies = [
     "pdfminer.six>=20260107",
+    "pypdfium2>=5",
 ]
 
 [project.optional-dependencies]
@@ -59,4 +69,12 @@ exclude = ["^reproduction/"]
 # anywhere else, including pdfminer, still fails as it should.
 [[tool.mypy.overrides]]
 module = "reportlab.*"
+ignore_missing_imports = true
+
+# pypdfium2 ships no py.typed marker either. The exemption is narrower than it
+# looks: the rendering layer touches this library in one module and converts its
+# results to plain tuples and bytes at the boundary, so nothing untyped travels
+# further into the package.
+[[tool.mypy.overrides]]
+module = "pypdfium2.*"
 ignore_missing_imports = true

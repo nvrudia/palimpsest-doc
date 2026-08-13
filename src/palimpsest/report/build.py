@@ -24,7 +24,12 @@ PDF_MEDIA_TYPE = "application/pdf"
 # from the installed distributions rather than written down here. The field
 # answers "what produced this result", so a library that took no part in the
 # analysis does not belong in it.
-PARSER_DISTRIBUTIONS = ("pdfminer.six",)
+#
+# pypdfium2 joined the list when rendering became part of the analysis rather
+# than a test aid. Two detectors measure the rendered page, and the visibility
+# of a text render mode is now a measurement taken from PDFium; neither can be
+# reproduced by someone who does not know which version produced them.
+PARSER_DISTRIBUTIONS = ("pdfminer.six", "pypdfium2")
 
 _HASH_CHUNK_BYTES = 1 << 16
 

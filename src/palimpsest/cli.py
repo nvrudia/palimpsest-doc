@@ -5,8 +5,10 @@ import sys
 from typing import TextIO
 
 from palimpsest import __version__
+from palimpsest.integrity.detectors.background_color import BackgroundColorDetector
 from palimpsest.integrity.detectors.base import Detector
 from palimpsest.integrity.detectors.invisible_text import InvisibleTextDetector
+from palimpsest.integrity.detectors.outside_page import OutsidePageDetector
 from palimpsest.integrity.detectors.tiny_text import TinyTextDetector
 from palimpsest.report.build import build_report
 from palimpsest.report.model import Report
@@ -19,9 +21,27 @@ EXIT_CLEAN = 0
 EXIT_FINDINGS = 1
 EXIT_ERROR = 2
 
-# The order detectors run in is the order their findings appear in the report,
-# and that order has to hold between runs on the same file.
-DETECTORS: list[Detector] = [InvisibleTextDetector(), TinyTextDetector()]
+
+def build_detectors(path: str) -> list[Detector]:
+    """Every detector, in the order their findings will appear in the report.
+
+    Built per scan rather than held as a constant because two of them measure
+    the page itself and need the document to do it. The order is written out
+    once, in one list, with no branch adding to it: findings are evidence, and
+    evidence that reorders itself between runs on one unchanged file cannot be
+    cited.
+
+    Strongest and least arguable first, weakest last. A render mode that paints
+    nothing is unambiguous; a fragment the colour of its background is nearly so;
+    text outside the page needs the page geometry to be believed; a small font is
+    the one finding that a legitimate document may produce.
+    """
+    return [
+        InvisibleTextDetector(),
+        BackgroundColorDetector(path),
+        OutsidePageDetector(path),
+        TinyTextDetector(),
+    ]
 
 
 def _force_utf8(stream: TextIO) -> None:
@@ -108,9 +128,14 @@ def scan(path: str, as_json: bool) -> int:
     Every failure returns EXIT_ERROR. A document that parses but contains no
     text at all is not a failure: an empty report with no findings is the
     correct answer, and returns EXIT_CLEAN.
+
+    A document the renderer cannot handle is a failure, and no partial report is
+    printed for it. Two of the four detectors measure the rendered page, so a
+    report produced without them would show fewer findings while looking exactly
+    like a report from a clean document.
     """
     try:
-        report = build_report(path, DETECTORS)
+        report = build_report(path, build_detectors(path))
         print(report.to_json() if as_json else format_report(report))
     except Exception as exc:  # noqa: BLE001 - see EXIT_ERROR above
         # Anything at all: an unreadable file, a malformed document, a parser

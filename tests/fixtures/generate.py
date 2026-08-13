@@ -27,9 +27,16 @@ not. During this step reportlab produced a plausible-looking but wrong file
 twice: setTextRenderMode(0) silently had no effect, and Helvetica silently
 rendered Cyrillic as a row of "n". A fixture that lies makes the test suite
 report success while checking something other than what was meant.
+
+Since step 3 the check no longer relies on the text layer alone. Every fragment
+is also rasterised and its pixels counted, so a fixture claiming to hide
+something must prove it against a renderer that shares no code with the parser.
+That closes the circularity the earlier version of this note admitted to: the
+claim and its verification no longer come from the same reading of the file.
 """
 
 from pathlib import Path
+from typing import NoReturn
 
 from reportlab.pdfgen import canvas
 from reportlab.pdfgen.textobject import PDFTextObject
@@ -37,6 +44,7 @@ from reportlab.pdfgen.textobject import PDFTextObject
 from palimpsest.integrity.detectors.tiny_text import MIN_LEGIBLE_FONT_SIZE
 from palimpsest.integrity.extract import extract_glyphs, group_runs
 from palimpsest.integrity.model import TextRun
+from palimpsest.integrity.render import painted_pixels, visible_area
 
 PAGE_SIZE = (612.0, 792.0)
 
@@ -55,6 +63,17 @@ VISIBLE_PARAGRAPH = "This sample document contains one paragraph of ordinary vis
 SECOND_PARAGRAPH = "It exists so that a detector has something legitimate to leave alone."
 HIDDEN_MARKER = "HIDDEN INSTRUCTION MARKER"
 TINY_MARKER = "SUB LEGIBLE MARKER"
+BACKGROUND_MARKER = "BACKGROUND COLOUR MARKER"
+OUTSIDE_MARKER = "OFF PAGE MARKER"
+
+# The page is left unpainted, so its background is the white the renderer fills
+# with. Text set to the same white is the anomaly.
+BACKGROUND_FILL_GRAY = 1.0
+
+# Far enough to the left that the whole fragment clears the page: a partial
+# overlap is deliberately not a finding, so a fixture that only half leaves the
+# page would test the opposite of what it claims.
+OUTSIDE_X = -300.0
 
 
 def _visible(text_object: PDFTextObject, text: str, size: float) -> None:
@@ -63,8 +82,10 @@ def _visible(text_object: PDFTextObject, text: str, size: float) -> None:
     text_object.textLine(text)
 
 
-def _draw_visible(c: canvas.Canvas, y: float, text: str, size: float = BODY_FONT_SIZE) -> None:
-    text_object = c.beginText(72, y)
+def _draw_visible(
+    c: canvas.Canvas, y: float, text: str, size: float = BODY_FONT_SIZE, x: float = 72.0
+) -> None:
+    text_object = c.beginText(x, y)
     _visible(text_object, text, size)
     c.drawText(text_object)
 
@@ -80,6 +101,22 @@ def _draw_invisible(c: canvas.Canvas, y: float, text: str) -> None:
     c.restoreState()
 
 
+def _draw_background_coloured(c: canvas.Canvas, y: float, text: str) -> None:
+    """Add a fragment painted the colour of the page, in the ordinary mode.
+
+    Wrapped in q/Q for the same reason as the render mode: the fill colour is
+    part of the graphics state and survives BT/ET, so without the wrapping every
+    following fragment would inherit it and the document would be blank.
+    """
+    c.saveState()
+    text_object = c.beginText(72, y)
+    text_object.setFont(FONT_NAME, BODY_FONT_SIZE)
+    text_object.setFillGray(BACKGROUND_FILL_GRAY)
+    text_object.textLine(text)
+    c.drawText(text_object)
+    c.restoreState()
+
+
 def _describe(runs: list[TextRun]) -> str:
     """Render the parsed runs for an error message."""
     return "\n".join(
@@ -87,11 +124,21 @@ def _describe(runs: list[TextRun]) -> str:
     )
 
 
+def _bbox(run: TextRun) -> tuple[float, float, float, float]:
+    return (run.x0, run.y0, run.x1, run.y1)
+
+
+def _locate(runs: list[TextRun], marker: str) -> TextRun | None:
+    return next((run for run in runs if marker in run.text), None)
+
+
 def _verify(
     path: Path,
     *,
     invisible_texts: list[str],
     tiny_texts: list[str],
+    background_texts: list[str],
+    outside_texts: list[str],
     visible_texts: list[str],
 ) -> None:
     """Check that the written file contains exactly the anomalies intended.
@@ -100,15 +147,16 @@ def _verify(
     stop the run where it was created, not surface later as a puzzling failure
     in a test that looks unrelated.
 
-    This check is partly circular: it reads the file through the same extraction
-    layer the tests exercise, so a misreading shared by both would satisfy it. It
-    is reliable against faults on the generator's side, which is what it exists
-    for, and not against faults in extraction itself. The independent check is
-    the pixel comparison of a rendered page, which arrives in step 3.
+    The structural half of this check reads the file through the same extraction
+    layer the tests exercise, and a misreading shared by both would satisfy it.
+    The pixel half does not: it rasterises the page with an unrelated library and
+    counts what was actually painted. Every fragment is measured, so a fixture
+    cannot claim to hide a marker that a renderer would in fact display, nor
+    quietly blank a fragment it promised to show.
     """
     runs = group_runs(extract_glyphs(str(path)))
 
-    def fail(reason: str) -> None:
+    def fail(reason: str) -> NoReturn:
         raise RuntimeError(
             f"fixture {path.name} is not what it claims: {reason}\n{_describe(runs)}"
         )
@@ -133,10 +181,56 @@ def _verify(
         if run not in invisible and run not in tiny and abs(run.font_size) < MIN_LEGIBLE_FONT_SIZE:
             fail(f"run {run.text!r} is unintentionally sub-legible")
 
+    for expected in background_texts:
+        located = _locate(runs, expected)
+        if located is None:
+            fail(f"background-coloured run {expected!r} is absent from the parsed document")
+        # Its invisibility has to come from the colour and from nothing else, or
+        # the fixture would still hide its marker while testing another detector.
+        if located.render_mode != VISIBLE_RENDER_MODE:
+            fail(
+                f"background-coloured run {expected!r} carries render mode {located.render_mode!r}"
+            )
+        if abs(located.font_size) < MIN_LEGIBLE_FONT_SIZE:
+            fail(f"background-coloured run {expected!r} is also sub-legible")
+
+    for expected in outside_texts:
+        located = _locate(runs, expected)
+        if located is None:
+            fail(f"off-page run {expected!r} is absent from the parsed document")
+        offset_x, offset_y, width, height = visible_area(str(path), located.page)
+        # Wholly outside, not merely overlapping the edge: a partial overlap is
+        # deliberately not a finding, so a fixture that only half leaves the page
+        # would prove the opposite of what it was written to prove.
+        if not (
+            located.x1 <= offset_x
+            or located.x0 >= offset_x + width
+            or located.y1 <= offset_y
+            or located.y0 >= offset_y + height
+        ):
+            fail(
+                f"off-page run {expected!r} at {_bbox(located)} still meets the visible area "
+                f"({offset_x}, {offset_y}) to ({offset_x + width}, {offset_y + height})"
+            )
+
     # Guards against a font silently substituting characters it cannot encode.
     for expected in visible_texts:
         if not any(expected in run.text for run in runs):
             fail(f"visible text {expected!r} is absent from the parsed document")
+
+    # The independent half. Every fragment the document was meant to hide has to
+    # paint nothing, and every fragment it was meant to show has to paint
+    # something, measured by a library that never saw the text layer.
+    hidden = invisible_texts + tiny_texts + background_texts + outside_texts
+    for run in runs:
+        if not run.text.strip():
+            continue
+        painted = painted_pixels(str(path), run.page, _bbox(run))
+        if any(marker in run.text for marker in hidden):
+            if painted:
+                fail(f"run {run.text!r} was meant to be hidden but paints {painted} pixel(s)")
+        elif not painted:
+            fail(f"run {run.text!r} was meant to be visible but paints nothing")
 
 
 def clean_pdf(directory: Path) -> Path:
@@ -151,6 +245,8 @@ def clean_pdf(directory: Path) -> Path:
         path,
         invisible_texts=[],
         tiny_texts=[],
+        background_texts=[],
+        outside_texts=[],
         visible_texts=[VISIBLE_PARAGRAPH, SECOND_PARAGRAPH],
     )
     return path
@@ -169,6 +265,8 @@ def invisible_text_pdf(directory: Path) -> Path:
         path,
         invisible_texts=[HIDDEN_MARKER],
         tiny_texts=[],
+        background_texts=[],
+        outside_texts=[],
         visible_texts=[VISIBLE_PARAGRAPH, SECOND_PARAGRAPH],
     )
     return path
@@ -187,6 +285,8 @@ def tiny_text_pdf(directory: Path) -> Path:
         path,
         invisible_texts=[],
         tiny_texts=[TINY_MARKER],
+        background_texts=[],
+        outside_texts=[],
         visible_texts=[VISIBLE_PARAGRAPH, SECOND_PARAGRAPH],
     )
     return path
@@ -206,6 +306,48 @@ def both_pdf(directory: Path) -> Path:
         path,
         invisible_texts=[HIDDEN_MARKER],
         tiny_texts=[TINY_MARKER],
+        background_texts=[],
+        outside_texts=[],
+        visible_texts=[VISIBLE_PARAGRAPH, SECOND_PARAGRAPH],
+    )
+    return path
+
+
+def background_color_pdf(directory: Path) -> Path:
+    """A visible paragraph plus one fragment painted the colour of the page."""
+    path = Path(directory) / "background_color.pdf"
+    c = canvas.Canvas(str(path), pagesize=PAGE_SIZE)
+    _draw_visible(c, 720, VISIBLE_PARAGRAPH)
+    _draw_background_coloured(c, 700, BACKGROUND_MARKER)
+    _draw_visible(c, 680, SECOND_PARAGRAPH)
+    c.showPage()
+    c.save()
+    _verify(
+        path,
+        invisible_texts=[],
+        tiny_texts=[],
+        background_texts=[BACKGROUND_MARKER],
+        outside_texts=[],
+        visible_texts=[VISIBLE_PARAGRAPH, SECOND_PARAGRAPH],
+    )
+    return path
+
+
+def outside_page_pdf(directory: Path) -> Path:
+    """A visible paragraph plus one fragment written off the edge of the page."""
+    path = Path(directory) / "outside_page.pdf"
+    c = canvas.Canvas(str(path), pagesize=PAGE_SIZE)
+    _draw_visible(c, 720, VISIBLE_PARAGRAPH)
+    _draw_visible(c, 700, OUTSIDE_MARKER, BODY_FONT_SIZE, OUTSIDE_X)
+    _draw_visible(c, 680, SECOND_PARAGRAPH)
+    c.showPage()
+    c.save()
+    _verify(
+        path,
+        invisible_texts=[],
+        tiny_texts=[],
+        background_texts=[],
+        outside_texts=[OUTSIDE_MARKER],
         visible_texts=[VISIBLE_PARAGRAPH, SECOND_PARAGRAPH],
     )
     return path
