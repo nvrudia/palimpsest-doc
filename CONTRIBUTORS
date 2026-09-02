@@ -1,0 +1,39 @@
+# Contributors
+
+People who have worked on Palimpsest-doc, and what they contribute.
+
+Roles are listed because they differ in kind. Not everyone who shapes this
+project writes code, and the git log alone would not show that.
+
+---
+
+**Mykola Rudia** <t.techukr@gmail.com>
+ORCID: https://orcid.org/0009-0004-3245-0863
+
+Design, implementation, documentation, paper. Maintainer.
+
+---
+
+**Oleksii Tsarapkin** <aa2097923@gmail.com>
+
+Legal analysis. Which divergences carry consequences in a contract and which
+are artefacts of conversion; how a finding must be worded to be usable as
+evidence; which classes of document the tool handles badly and why.
+
+Contributions of this kind appear in the git history as `Suggested-by`
+trailers on the commits that implement them, and as co-authorship of
+`docs/legal-significance.md`.
+
+---
+
+## On attribution
+
+Commits carry `Co-Authored-By` where a language model participated in
+producing the code, and `Suggested-by` where a change originates from a
+specific person's expertise rather than from the maintainer's own analysis.
+
+The distinction matters: `Author` would be a claim about who wrote the code,
+and it would not be true in either case.
+
+See the *Use of generative AI* section in `README.md` for the general
+statement.
