@@ -138,8 +138,7 @@ See `CONTRIBUTORS` for who has worked on this.
 *Silent Degradation in Document Processing Pipelines: Two Independent Case
 Studies* describes a class of failure that produces plausible output, passes
 verification, and is detectable only against the source, with instances from
-two unrelated systems. Preprint in preparation; the draft is in this
-repository.
+two unrelated systems. Preprint: https://doi.org/10.5281/zenodo.23310803
 
 ## License
 
