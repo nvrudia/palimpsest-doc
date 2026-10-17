@@ -78,6 +78,11 @@ Each finding carries the detector, a severity, the location, the evidence
 quoted verbatim from the document, and an explanation of what was observed.
 Explanations describe what is in the file, not what anyone intended by it.
 
+Every report ends with a coverage statement: which detectors ran, how many
+pages were analysed, which were skipped and why, and which kinds of content the
+tool does not examine. It is printed even when there are no findings, since a
+report of nothing found reads identically to a report of nothing checked.
+
 ## What it does not do
 
 - DOCX. Only PDF for now.

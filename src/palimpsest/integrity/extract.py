@@ -14,6 +14,7 @@ from pdfminer.converter import PDFLayoutAnalyzer
 from pdfminer.layout import LTChar
 from pdfminer.pdfcolor import PDFColorSpace
 from pdfminer.pdfdevice import PDFTextSeq
+from pdfminer.pdfdocument import PDFDocument
 from pdfminer.pdffont import PDFFont
 from pdfminer.pdfinterp import (
     PDFGraphicState,
@@ -22,10 +23,11 @@ from pdfminer.pdfinterp import (
     PDFTextState,
 )
 from pdfminer.pdfpage import PDFPage
+from pdfminer.pdfparser import PDFParser
 from pdfminer.psexceptions import PSException
 from pdfminer.utils import Matrix
 
-from palimpsest.integrity.model import Glyph, TextRun
+from palimpsest.integrity.model import DocumentFacts, Glyph, PageFacts, TextRun
 
 # Two glyph sizes count as equal below this difference. Sizes are floats derived
 # from a matrix multiplication, so exact equality would split runs on rounding
@@ -148,19 +150,36 @@ def _to_glyph(char: LTChar, page_number: int, render_mode: int | None) -> Glyph:
     )
 
 
-def extract_glyphs(path: str) -> list[Glyph]:
-    """Return every character of the PDF, in the order the parser emits them.
+def extract_document(path: str) -> tuple[list[Glyph], DocumentFacts]:
+    """Read one PDF, returning its characters and what was seen while reading.
+
+    The document is opened explicitly rather than through PDFPage.get_pages,
+    which builds the parser and the document itself and then discards both. Two
+    things are wanted from them and cannot be recovered afterwards: the rotation
+    of each page, and whether the file is encrypted. Reading the file a second
+    time to recover them would risk the two readings disagreeing.
+
+    The pages are recorded as they are walked, so the count is of pages this
+    analysis actually visited rather than of pages some other library reports.
 
     Raises ValueError if the file cannot be read or is not a PDF.
     """
     rsrcmgr = PDFResourceManager()
     device = _GlyphCollector(rsrcmgr)
     interpreter = PDFPageInterpreter(rsrcmgr, device)
+    pages: list[PageFacts] = []
     try:
         with open(path, "rb") as handle:
-            for page_number, page in enumerate(PDFPage.get_pages(handle), start=1):
+            document = PDFDocument(PDFParser(handle))
+            for page_number, page in enumerate(PDFPage.create_pages(document), start=1):
+                # Normalised the way the specification defines /Rotate: a
+                # multiple of 90, which may be negative or above 360 in the
+                # file. 0 has to stay 0, as the rest of the tool reads it as
+                # "not rotated".
+                pages.append(PageFacts(number=page_number, rotation=page.rotate % 360))
                 device.page_number = page_number
                 interpreter.process_page(page)
+            encrypted = document.encryption is not None
     except OSError as exc:
         raise ValueError(f"Cannot read {path!r}: {exc}") from exc
     except PSException as exc:
@@ -169,7 +188,15 @@ def extract_glyphs(path: str) -> list[Glyph]:
         raise ValueError(f"Cannot parse {path!r} as a PDF: {exc}") from exc
     finally:
         device.close()
-    return device.glyphs
+    return device.glyphs, DocumentFacts(pages=tuple(pages), encrypted=encrypted)
+
+
+def extract_glyphs(path: str) -> list[Glyph]:
+    """Return every character of the PDF, in the order the parser emits them.
+
+    Raises ValueError if the file cannot be read or is not a PDF.
+    """
+    return extract_document(path)[0]
 
 
 def _same_state(current: Glyph, previous: Glyph) -> bool:

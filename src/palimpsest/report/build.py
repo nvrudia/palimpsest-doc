@@ -10,8 +10,9 @@ from importlib.metadata import version
 
 from palimpsest import __version__
 from palimpsest.integrity.detectors.base import Detector
-from palimpsest.integrity.extract import extract_glyphs, group_runs
-from palimpsest.report.model import Finding, Report, SourceDocument
+from palimpsest.integrity.extract import extract_document, group_runs
+from palimpsest.integrity.model import DocumentFacts, TextRun
+from palimpsest.report.model import Coverage, Finding, Report, SkippedPage, SourceDocument
 
 # A PDF is identified by its header, never by the file extension: the extension
 # is metadata a user can set to anything, while the header is the thing every
@@ -30,6 +31,33 @@ PDF_MEDIA_TYPE = "application/pdf"
 # of a text render mode is now a measurement taken from PDFium; neither can be
 # reproduced by someone who does not know which version produced them.
 PARSER_DISTRIBUTIONS = ("pdfminer.six", "pypdfium2")
+
+# What this tool does not examine, stated as facts about the tool. Every entry
+# was established by measurement: a document carrying the content in question
+# was scanned, and the content never reached a detector.
+#
+# The list is constant. The limits of the check do not depend on the document
+# being checked, and a reader comparing two reports must not have to wonder
+# whether a limit was omitted because it did not apply.
+NOT_CHECKED = (
+    "annotations",
+    "form field values",
+    "embedded files",
+    "text layer of scanned pages against the page image",
+    "objects obscured by other objects",
+    "formats other than PDF",
+    "pages with /Rotate containing text (scan is refused)",
+)
+
+# Said of a document that opened without a password while still carrying an
+# encryption dictionary: the restrictions in it are owner restrictions, which
+# this tool neither reads nor enforces.
+OWNER_PASSWORD_NOTE = "document is encrypted with an owner password; permissions not evaluated"
+
+# Why a page was not examined. A page reaches a detector only by way of a text
+# run, so a page that produced none was walked but never looked at.
+NO_TEXT_LAYER = "no text layer"
+ROTATED_NO_TEXT_LAYER = "rotated page, no text layer"
 
 _HASH_CHUNK_BYTES = 1 << 16
 
@@ -68,6 +96,37 @@ def _created_at() -> str:
     return datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
+def _coverage(detectors: list[Detector], facts: DocumentFacts, runs: list[TextRun]) -> Coverage:
+    """State what the scan covered.
+
+    A page is counted as analysed when at least one text run was found on it,
+    because a run is the only thing a detector is given. A page that yielded
+    none was walked by the interpreter and then seen by nothing, which is not
+    the same as a page on which nothing was found.
+
+    The detector names are taken from the detectors that actually ran, not from
+    a list written here. A list written here would go on being correct in the
+    report long after it had stopped being correct in the tool.
+    """
+    examined = {run.page for run in runs}
+    skipped = [
+        SkippedPage(
+            page=page.number,
+            reason=ROTATED_NO_TEXT_LAYER if page.rotation else NO_TEXT_LAYER,
+        )
+        for page in facts.pages
+        if page.number not in examined
+    ]
+    return Coverage(
+        detectors_run=[detector.name for detector in detectors],
+        pages_total=len(facts.pages),
+        pages_analysed=len(facts.pages) - len(skipped),
+        pages_skipped=skipped,
+        not_checked=list(NOT_CHECKED),
+        notes=[OWNER_PASSWORD_NOTE] if facts.encrypted else [],
+    )
+
+
 def build_report(path: str, detectors: list[Detector]) -> Report:
     """Run every detector over one document and assemble the report.
 
@@ -81,7 +140,8 @@ def build_report(path: str, detectors: list[Detector]) -> Report:
     sha256, size_bytes, head = _digest_and_size(path)
     media_type = _media_type(head, path)
 
-    runs = group_runs(extract_glyphs(path))
+    glyphs, facts = extract_document(path)
+    runs = group_runs(glyphs)
 
     findings: list[Finding] = []
     for detector in detectors:
@@ -98,4 +158,5 @@ def build_report(path: str, detectors: list[Detector]) -> Report:
         created_at=_created_at(),
         findings=findings,
         parser_versions=_parser_versions(),
+        coverage=_coverage(detectors, facts, runs),
     )

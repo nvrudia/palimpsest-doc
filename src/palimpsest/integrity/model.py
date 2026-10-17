@@ -46,3 +46,28 @@ class TextRun:
     fill_color: tuple[float, ...] | None
     color_space: str | None
     glyph_count: int
+
+
+@dataclass(frozen=True)
+class PageFacts:
+    """What is known about one page from reading the document structure alone.
+
+    Recorded while the pages are walked, before any detector sees them, so that
+    a page nothing was found on can still be told apart from a page nothing was
+    looked at on.
+    """
+
+    number: int  # one-based
+    rotation: int  # degrees, as the /Rotate entry gives it
+
+
+@dataclass(frozen=True)
+class DocumentFacts:
+    """Properties of the document as a whole, recorded while it was read."""
+
+    pages: tuple[PageFacts, ...]
+    # True when the file carries an encryption dictionary. Reaching this point
+    # means the document opened with an empty user password, so whatever
+    # restrictions it declares are owner restrictions. This tool does not read
+    # them and does not act on them.
+    encrypted: bool

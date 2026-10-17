@@ -94,6 +94,29 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _coverage_lines(report: Report) -> list[str]:
+    """Render the coverage block, printed whether or not anything was found.
+
+    A report that ends at "findings: 0" says only that this tool found nothing.
+    Printed alone it reads as though the document had been examined and cleared,
+    which is a claim no part of the tool is in a position to make. This block is
+    what keeps the two apart: it names the detectors that ran, the pages they
+    saw, the pages they did not, and the content none of them looks at.
+    """
+    coverage = report.coverage
+    lines = [
+        "",
+        "Coverage",
+        f"    detectors run:   {', '.join(coverage.detectors_run) or 'none'}",
+        f"    pages analysed:  {coverage.pages_analysed} of {coverage.pages_total}",
+    ]
+    lines += [f"    page skipped:    {s.page} ({s.reason})" for s in coverage.pages_skipped]
+    lines += [f"    note:            {note}" for note in coverage.notes]
+    lines.append("    not checked:")
+    lines += [f"        - {entry}" for entry in coverage.not_checked]
+    return lines
+
+
 def format_report(report: Report) -> str:
     """Render a report for reading, in a form that can be quoted as evidence.
 
@@ -119,6 +142,7 @@ def format_report(report: Report) -> str:
         # not the other way round.
         lines.append(f"    evidence:    {finding.evidence}")
         lines.append(f"    explanation: {finding.explanation}")
+    lines.extend(_coverage_lines(report))
     return "\n".join(lines)
 
 

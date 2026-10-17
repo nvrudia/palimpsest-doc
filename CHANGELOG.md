@@ -37,6 +37,18 @@
 - Fixture self-verification now counts pixels as well as reading the text layer.
   The earlier check read the file through the same extraction layer the tests
   exercise, so a misreading shared by both would have satisfied it.
+- A coverage statement in every report, in JSON as `coverage` and at the end of
+  the readable output: the detectors that ran, how many pages were analysed and
+  which were skipped and why, any note limiting the check of this particular
+  document, and what the tool does not examine at all. The last list is a set of
+  facts about the tool, established by measurement rather than assumption:
+  annotations, form field values and embedded files were each put into a
+  document and none of them reached a detector. A report stating only that
+  nothing was found cannot be relied on, because it reads the same whether the
+  document was examined or not.
+- Documents with rotated pages that carry no text were previously reported as
+  clean without those pages being examined; such pages are now listed as
+  skipped.
 
 ### Changed
 - Text is extracted with `pdfminer.six` directly instead of `pdfplumber`. The
