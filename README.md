@@ -43,7 +43,7 @@ intent does not see the second case.
 Working, pre-release. The command line interface is stable enough to use; the
 API is not, and will change.
 
-Four detectors, 58 tests, CI on Python 3.11 and 3.14. Not yet on PyPI.
+Four detectors, 67 tests, CI on Python 3.11 and 3.14. Not yet on PyPI.
 
 ## Usage
 
